@@ -1,9 +1,18 @@
 import React, { useState, useRef, useEffect } from "react";
 import styled from "styled-components";
-import { motion } from "framer-motion";
+import { motion, useMotionValue } from "framer-motion";
+
+import { clampValue, convertToPixel } from "./helpers";
 
 const StyledSlider = styled.div`
   --slider-height: 30px;
+
+  header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 1em;
+  }
 
   .input-field {
     border: 2px solid rgba(0, 0, 0, 0.1);
@@ -11,19 +20,17 @@ const StyledSlider = styled.div`
     letter-spacing: 0.05em;
     padding: 0.5em 1em;
     border-radius: 2em;
-    display: flex;
 
     &.invalid {
       border-color: var(--color-error);
     }
 
-    &:after {
-      content: "cm";
+    .unit {
       color: rgba(0, 0, 0, 0.3);
     }
 
     input {
-      flex: 1;
+      width: 60px;
       appearance: none;
       outline: none;
       border: none;
@@ -37,6 +44,8 @@ const StyledSlider = styled.div`
     height: var(--slider-height);
     display: flex;
     align-items: center;
+    grid-column: span 2;
+    margin-top: 1em;
 
     &:before {
       left: 0;
@@ -51,7 +60,7 @@ const StyledSlider = styled.div`
   .progress {
     position: absolute;
     height: calc(var(--slider-height) / 2);
-    width: var(--slider-progress);
+    /* width: var(--slider-progress); */
     border-radius: calc(var(--slider-height) / 2);
     background-color: rgb(var(--color-primary));
   }
@@ -72,38 +81,31 @@ const StyledSlider = styled.div`
   }
 `;
 
-const Slider = ({ min = 160, max = 200, step = 1 }) => {
+const Slider = ({ min = 160, max = 200 }) => {
   const initialValue = (max - min) / 2 + min;
+  const handlePosition = useMotionValue(0);
 
   const [value, setValue] = useState(initialValue);
   const [inputValue, setInputValue] = useState(initialValue);
   const [inputInvalid, setInputInvalid] = useState(false);
-  const [sliderWidth, setSliderWidth] = useState(false);
+  const [sliderWidth, setSliderWidth] = useState(0);
 
   const trackRef = useRef(null);
   const progressRef = useRef(null);
 
+  // get the width of the slider track element
   useEffect(() => {
-    if (!trackRef.current) return;
-
     setSliderWidth(trackRef.current.getBoundingClientRect().width);
   }, [trackRef]);
 
-  /**
-   * This updates the slider value itself
-   * and the value of the input box which is a different one,
-   * so we can let the user enter a value which is outside of the
-   * min / max boundaries.
-   */
-  const handleSliderChange = event => {
-    const value = event.target.value;
-
-    // update input- and slider value
-    setInputValue(value);
-    setValue(value);
-  };
+  // updathe the slider position as soon as the slider width is measured
+  useEffect(() => {
+    handlePosition.set(convertToPixel(value, min, max, sliderWidth));
+  }, [handlePosition, value, min, max, sliderWidth]);
 
   /**
+   * Handles changing the value directly in the number input field.
+   *
    * Change and Blur events are separated here because the user should be
    * able to enter a number which is way too high or low.
    *
@@ -112,15 +114,15 @@ const Slider = ({ min = 160, max = 200, step = 1 }) => {
   const handleInputChange = event => {
     const value = event.target.value;
 
+    // update input value in state
+    setInputValue(value);
+
     // check if value is out of range and set invalid state
     if (value < min || value > max) {
       setInputInvalid(true);
     } else {
       setInputInvalid(false);
     }
-
-    // update input value in state
-    setInputValue(value);
   };
 
   /**
@@ -128,39 +130,32 @@ const Slider = ({ min = 160, max = 200, step = 1 }) => {
    * remove the invalid state of the input and update the slider with the new value
    */
   const handleInputBlur = event => {
-    const value = clampValue(event.target.value);
+    const value = clampValue(event.target.value, min, max);
 
     // since value is clamped, we can safely remove the invalid state
     setInputInvalid(false);
 
-    // update input- and slider value
+    // update input- and slider value and drag handle position
     setInputValue(value);
     setValue(value);
+    handlePosition.set(convertToPixel(value, min, max, sliderWidth));
   };
 
   /**
-   * Handle dragging of the slider handle through framer moton
+   * Handle dragging of the slider handle (with framer moton)
    */
   const handleDrag = (event, info) => {
-    const x = info.point.x;
-    const rawValue = (x / sliderWidth) * (max - min) + min;
-    const value = clampValue(Math.round(rawValue));
+    const pixelValue = info.point.x;
+
+    // this formular takes the pixel value between 0 and sliderWidth
+    // and converts it into a cm value in the respective min and max range
+    const rawValue = (pixelValue / sliderWidth) * (max - min) + min;
+    const value = clampValue(Math.round(rawValue), min, max);
 
     // update input- and slider value
-    setInputValue(value);
     setValue(value);
-
-    // update progress bar
-    progressRef.current.style.setProperty(
-      "--slider-progress",
-      `${Math.min(sliderWidth, x)}px`
-    );
+    setInputValue(value);
   };
-
-  /**
-   * Helper function to clamp the value between min and max
-   */
-  const clampValue = value => Math.min(max, Math.max(min, value));
 
   return (
     <div>
@@ -168,12 +163,26 @@ const Slider = ({ min = 160, max = 200, step = 1 }) => {
       <pre>{value} cm</pre>
       <StyledSlider>
         <header>
-          <label htmlFor="slider">Body Height</label>
-          <button>help</button>
+          <div className="label">
+            <label htmlFor="slider">Body Height</label>
+            <button>help</button>
+          </div>
+
+          <div className={`input-field ${inputInvalid ? "invalid" : "valid"}`}>
+            <input
+              type="number"
+              min={min}
+              max={max}
+              value={inputValue}
+              onChange={handleInputChange}
+              onBlur={handleInputBlur}
+            />
+            <span className="unit">cm</span>
+          </div>
         </header>
 
         <motion.div className="track" ref={trackRef}>
-          <div className="progress" ref={progressRef} />
+          <motion.div className="progress" ref={progressRef} style={{ width: handlePosition }} />
 
           <motion.div
             className="handle"
@@ -182,29 +191,9 @@ const Slider = ({ min = 160, max = 200, step = 1 }) => {
             dragElastic={0.02}
             dragMomentum={false}
             onDrag={handleDrag}
+            style={{ x: handlePosition }}
           />
         </motion.div>
-
-        <input
-          type="range"
-          name="slider"
-          min={min}
-          max={max}
-          step={step}
-          value={value}
-          onChange={handleSliderChange}
-        />
-
-        <div className={`input-field ${inputInvalid ? "invalid" : "valid"}`}>
-          <input
-            type="number"
-            min={min}
-            max={max}
-            value={inputValue}
-            onChange={handleInputChange}
-            onBlur={handleInputBlur}
-          />
-        </div>
       </StyledSlider>
     </div>
   );
