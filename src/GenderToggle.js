@@ -108,19 +108,13 @@ const GenderToggle = () => {
       </pre>
 
       <StyledToggle>
-        <label
-          className={`girl ${activeGender === 1 ? "active" : ""}`}
-          onClick={handleClick}
-        >
+        <label className={`girl ${activeGender === 1 ? "active" : ""}`} onClick={handleClick}>
           <span>Woman</span>
           <IconGirl className="icon" />
           <input type="radio" name="gender-toggle" value="1" />
         </label>
 
-        <label
-          className={`guy ${activeGender === 2 ? "active" : ""}`}
-          onClick={handleClick}
-        >
+        <label className={`guy ${activeGender === 2 ? "active" : ""}`} onClick={handleClick}>
           <span>Man</span>
           <IconGuy className="icon" />
           <input type="radio" name="gender-toggle" value="2" />
